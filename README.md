@@ -6,6 +6,17 @@ SevaSetu/
 └── frontend/   React (JSX + Vite)          → http://localhost:5173
 ```
 
+## Login
+Default admin account (first start lo automatic ga create avthundi):
+
+| Username | Password |
+|---|---|
+| `admin` | `admin@123` |
+
+Password database lo hash (PBKDF2) chesi save avthundi. Real deployment lo password maarchandi –
+`POST /api/auth/change-password` API, leda first run mundu `ADMIN_USERNAME` / `ADMIN_PASSWORD` environment variables set cheyandi.
+Login lekunda ae API pani cheyadu (401).
+
 ## Pages
 | Page | Em chestundi |
 |---|---|
@@ -13,6 +24,7 @@ SevaSetu/
 | Grievance | New citizen grievance register form – ticket number (GRV-00001) auto generate |
 | Complaints | All complaints list – search, filters, click chesi status/priority update, volunteer assign, notes, timeline |
 | Volunteers | Volunteer add / edit / remove, area & skills, active/resolved case count, assigned cases view |
+| Constituencies | District wise assembly constituencies, complaint counts, export |
 | Reports | Date range filter, ward-wise, category-wise, priority, volunteer performance, CSV export, print |
 
 ## Run cheyadam (2 terminals)
@@ -37,6 +49,8 @@ npm run dev
 Browser lo http://localhost:5173 open cheyandi.
 
 ## API endpoints
+- `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`
+- `GET /api/constituencies`
 - `GET /api/dashboard`
 - `GET/POST /api/complaints`, `GET/PATCH/DELETE /api/complaints/{id}`
 - `GET/POST /api/volunteers`, `GET/PATCH/DELETE /api/volunteers/{id}`

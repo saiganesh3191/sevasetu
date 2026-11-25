@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import auth
 from .database import init_db
 from .routers import complaints, constituencies, dashboard, volunteers
 
@@ -18,12 +19,16 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
+    auth.init_auth()
 
 
-app.include_router(dashboard.router)
-app.include_router(complaints.router)
-app.include_router(volunteers.router)
-app.include_router(constituencies.router)
+# Login API is open; every other API needs a valid login token
+app.include_router(auth.router)
+protected = [Depends(auth.current_user)]
+app.include_router(dashboard.router, dependencies=protected)
+app.include_router(complaints.router, dependencies=protected)
+app.include_router(volunteers.router, dependencies=protected)
+app.include_router(constituencies.router, dependencies=protected)
 
 
 @app.get("/")

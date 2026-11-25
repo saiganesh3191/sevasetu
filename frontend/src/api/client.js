@@ -1,11 +1,27 @@
 // All calls go to /api, which Vite proxies to the Python backend (http://127.0.0.1:8000)
 const BASE = '/api'
 
+// ---- login session (token kept in the browser) ----
+const TOKEN_KEY = 'sevasetu_token'
+const USER_KEY = 'sevasetu_user'
+const read = (k) => { try { return localStorage.getItem(k) } catch { return null } }
+export const auth = {
+  token: () => read(TOKEN_KEY),
+  user: () => { try { return JSON.parse(read(USER_KEY) || 'null') } catch { return null } },
+  save: (token, user) => { try { localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)) } catch { /* ignore */ } },
+  clear: () => { try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY) } catch { /* ignore */ } },
+}
+
 async function request(path, options = {}) {
+  const token = auth.token()
   const res = await fetch(BASE + path, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   })
+  if (res.status === 401 && !path.startsWith('/auth/login')) {
+    auth.clear()
+    window.dispatchEvent(new Event('sevasetu:logout'))
+  }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`
     try {
@@ -23,6 +39,10 @@ const qs = (params = {}) => {
 }
 
 export const api = {
+  login: (username, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+  updateProfile: (data) => request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
+
   dashboard: () => request('/dashboard'),
 
   complaints: (filters) => request('/complaints' + qs(filters)),
@@ -41,7 +61,7 @@ export const api = {
   constituencies: () => request('/constituencies'),
 
   reports: (range) => request('/reports' + qs(range)),
-  exportUrl: (range) => BASE + '/reports/export' + qs(range),
+  exportUrl: (range) => BASE + '/reports/export' + qs({ ...range, token: auth.token() }),
 }
 
 export const DISTRICTS = ['Hyderabad', 'Rangareddy', 'Medchal-Malkajgiri', 'Warangal', 'Karimnagar', 'Khammam', 'Nalgonda', 'Nizamabad']
