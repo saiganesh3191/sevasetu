@@ -1,0 +1,8 @@
+name = "sevasetu-api"
+main = "src/index.js"
+compatibility_date = "2026-11-25"
+
+[[d1_databases]]
+binding = "sevasetu_demo"
+database_name = "sevasetu-demo"
+database_id = "5c11d5fb-439b-4a87-984e-c4662191ee5b"

@@ -1,5 +1,5 @@
 // All calls go to /api, which Vite proxies to the Python backend (http://127.0.0.1:8000)
-const BASE = '/api'
+const BASE = import.meta.env.VITE_API_BASE || '/api'
 
 // ---- login session (token kept in the browser) ----
 const TOKEN_KEY = 'sevasetu_token'

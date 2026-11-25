@@ -1,0 +1,16 @@
+name = "sevasetu-demo"
+compatibility_date = "2026-11-25"
+pages_build_output_dir = "frontend/dist"
+
+[[d1_databases]]
+binding = "sevasetu_demo"
+database_name = "sevasetu-demo"
+database_id = "5c11d5fb-439b-4a87-984e-c4662191ee5b"
+
+[env.production]
+name = "sevasetu-demo"
+
+[[env.production.d1_databases]]
+binding = "sevasetu_demo"
+database_name = "sevasetu-demo"
+database_id = "5c11d5fb-439b-4a87-984e-c4662191ee5b"
