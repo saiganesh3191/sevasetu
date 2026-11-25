@@ -34,9 +34,7 @@ export default function Sidebar({ user, onLogout, onProfileUpdate }) {
 
   // close the expanded menu whenever the page changes
   useEffect(() => { setOpen(false) }, [location.pathname])
-  useEffect(() => {
-    setProfile({ username: user?.username || '', full_name: user?.full_name || '' })
-  }, [user])
+  useEffect(() => { setProfile({ username: user?.username || '', full_name: user?.full_name || '' }) }, [user])
 
   // Esc key closes the menu
   useEffect(() => {
@@ -50,29 +48,25 @@ export default function Sidebar({ user, onLogout, onProfileUpdate }) {
     if (window.confirm('Logout cheyyala? Mee current session close avutundi.')) onLogout()
   }
   const saveProfile = async (e) => {
-    e.preventDefault()
-    setProfileError('')
-    setProfileSaving(true)
-    try {
-      await onProfileUpdate(profile)
-      setProfileOpen(false)
-    } catch (err) {
-      setProfileError(err.message)
-    } finally {
-      setProfileSaving(false)
-    }
+    e.preventDefault(); setProfileError(''); setProfileSaving(true)
+    try { await onProfileUpdate(profile); setProfileOpen(false) } catch (err) { setProfileError(err.message) } finally { setProfileSaving(false) }
   }
 
   return (
     <>
       <header className="topbar">
         <button className="menu-btn" onClick={() => setOpen(!open)} aria-label="Toggle menu">☰</button>
-        <div className="brand-logo sm">S</div>
+        <div className="tb-brand">
+          <img src="/brand/logo-sm.png" alt="Telangana Rakshana Sena logo" className="tb-logo" />
+          <div className="tb-names">
+            <div className="tb-te">తెలంగాణ రక్షణ సేన</div>
+            <div className="tb-en">TELANGANA RAKSHANA SENA</div>
+          </div>
+        </div>
         <button className="profile-trigger" onClick={() => setProfileOpen(true)} title="Edit profile" aria-label="Edit profile">
           <span className="avatar-sm">{(user?.full_name || user?.username || 'A')[0].toUpperCase()}</span>
         </button>
-        <div className="topbar-brand">SevaSetu</div>
-        <span className="topbar-sep">/</span>
+        <span className="topbar-sep">|</span>
         <div className="topbar-title">{current?.label || 'Dashboard'}</div>
         <div className="topbar-user">
           <button className="topbar-avatar-button" onClick={() => setProfileOpen(true)} title="Edit profile" aria-label="Edit profile">
@@ -98,27 +92,17 @@ export default function Sidebar({ user, onLogout, onProfileUpdate }) {
             </NavLink>
           ))}
         </nav>
-        <div className="rail-foot">v1.0 · Office Admin</div>
+        <div className="rail-foot">TRS Grievance Portal · v1.0</div>
       </aside>
-
-      {profileOpen && (
-        <Modal title="Edit profile" onClose={() => setProfileOpen(false)}>
-          <form onSubmit={saveProfile}>
-            <p className="muted profile-help">Mee profile details ikkada update cheyyandi.</p>
-            {profileError && <div className="alert error">{profileError}</div>}
-            <Field label="Full name">
-              <input value={profile.full_name} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} autoFocus />
-            </Field>
-            <Field label="Username">
-              <input value={profile.username} onChange={(e) => setProfile({ ...profile, username: e.target.value })} autoComplete="username" />
-            </Field>
-            <div className="row end gap">
-              <button type="button" className="btn" onClick={() => setProfileOpen(false)}>Cancel</button>
-              <button className="btn primary" disabled={profileSaving}>{profileSaving ? 'Saving…' : 'Save changes'}</button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      {profileOpen && <Modal title="Edit profile" onClose={() => setProfileOpen(false)}>
+        <form onSubmit={saveProfile}>
+          <p className="muted profile-help">Mee profile details ikkada update cheyyandi.</p>
+          {profileError && <div className="alert error">{profileError}</div>}
+          <Field label="Full name"><input value={profile.full_name} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} autoFocus /></Field>
+          <Field label="Username"><input value={profile.username} onChange={(e) => setProfile({ ...profile, username: e.target.value })} autoComplete="username" /></Field>
+          <div className="row end gap"><button type="button" className="btn" onClick={() => setProfileOpen(false)}>Cancel</button><button className="btn primary" disabled={profileSaving}>{profileSaving ? 'Saving…' : 'Save changes'}</button></div>
+        </form>
+      </Modal>}
     </>
   )
 }
