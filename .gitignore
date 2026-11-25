@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+backend/venv/
+*.db
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+
+# Local environment
+.env
+.env.*
+!.env.example
