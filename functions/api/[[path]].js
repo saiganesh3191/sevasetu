@@ -5,6 +5,11 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 
 const db = (ctx) => ctx.env.sevasetu_demo
 const body = async (request) => { try { return await request.json() } catch { return {} } }
+const DISTRICTS = ['Hyderabad','Rangareddy','Medchal-Malkajgiri','Warangal','Karimnagar','Khammam','Nalgonda','Nizamabad']
+const CATEGORIES = ['Roads & Drainage','Drinking Water','Education','Healthcare','Employment & Skill Development','Agriculture','Public Transport','Municipal Services']
+const STATUSES = ['Open','In Progress','On Hold','Completed','Rejected']
+const CONSTITUENCIES = { Hyderabad:['Khairatabad','Jubilee Hills','Secunderabad','Charminar','Malakpet','Amberpet'], Rangareddy:['Rajendranagar','Serilingampally','LB Nagar','Ibrahimpatnam','Maheshwaram','Chevella'], 'Medchal-Malkajgiri':['Malkajgiri','Medchal','Quthbullapur','Kukatpally','Uppal'], Warangal:['Warangal East','Narsampet','Wardhannapet'], Karimnagar:['Karimnagar','Choppadandi','Manakondur','Huzurabad'], Khammam:['Khammam','Palair','Madhira','Wyra','Sathupalli'], Nalgonda:['Nalgonda','Nakrekal','Miryalaguda','Devarakonda','Munugode'], Nizamabad:['Nizamabad Urban','Nizamabad Rural','Armur','Bodhan','Balkonda'] }
+const pending = (s) => ['Open','In Progress','On Hold'].includes(s)
 
 async function complaints(ctx, request, parts) {
   const method = request.method
@@ -34,8 +39,13 @@ async function complaints(ctx, request, parts) {
     const d = await body(request); const sets = []; const args = []
     for (const key of ['status','priority','volunteer_id']) if (d[key] !== undefined) { sets.push(`${key}=?`); args.push(d[key] || null) }
     if (sets.length) await db(ctx).prepare(`UPDATE complaints SET ${sets.join(',')},updated_at=datetime('now') WHERE id=?`).bind(...args,id).run()
+    if (d.note || d.status || d.priority || d.volunteer_id !== undefined) {
+      const note = d.note || (d.status ? `Status changed to ${d.status}` : d.priority ? `Priority set to ${d.priority}` : 'Complaint updated')
+      await db(ctx).prepare('INSERT INTO complaint_updates (complaint_id,note,status) VALUES (?,?,?)').bind(id,note,d.status||null).run()
+    }
     const row = await db(ctx).prepare('SELECT c.*, v.name AS volunteer_name FROM complaints c LEFT JOIN volunteers v ON v.id=c.volunteer_id WHERE c.id=?').bind(id).first()
-    return json({ ...row, updates: [] })
+    const updates = await db(ctx).prepare('SELECT * FROM complaint_updates WHERE complaint_id=? ORDER BY id DESC').bind(id).all()
+    return json({ ...row, updates: updates.results })
   }
   return json({ detail: 'Method not allowed' }, 405)
 }
@@ -64,11 +74,29 @@ export async function onRequest(context) {
   if (path[0] === 'complaints') return complaints(context, request, path)
   if (path[0] === 'volunteers') return volunteers(context, request, path)
   if (path[0] === 'dashboard') {
-    const c=(await db(context).prepare("SELECT COUNT(*) total, SUM(status='Open') open, SUM(status='Completed') completed FROM complaints").first())
-    const v=(await db(context).prepare("SELECT COUNT(*) total, SUM(status='Active') active FROM volunteers").first())
-    return json({ complaints:c, volunteers:v, by_category:[], by_district:[], by_status:[], status_by_district:{}, volunteers_by_district:[], category_district:{}, trend:[], recent:[] })
+    const [cr, vr] = await Promise.all([db(context).prepare('SELECT c.*, v.name volunteer_name FROM complaints c LEFT JOIN volunteers v ON v.id=c.volunteer_id ORDER BY c.id DESC').all(), db(context).prepare('SELECT * FROM volunteers ORDER BY name').all()])
+    const cs = cr.results, vs = vr.results; const empty = (name) => ({ name, total:0, pending:0, completed:0, rejected:0 })
+    const by_category = CATEGORIES.map(name => { const x=cs.filter(c=>c.category===name); return { ...empty(name), total:x.length, pending:x.filter(c=>pending(c.status)).length, completed:x.filter(c=>c.status==='Completed').length } })
+    const by_district = DISTRICTS.map(name => { const x=cs.filter(c=>c.district===name); return { ...empty(name), total:x.length, pending:x.filter(c=>pending(c.status)).length, completed:x.filter(c=>c.status==='Completed').length, rejected:x.filter(c=>c.status==='Rejected').length } })
+    const volunteers_by_district = DISTRICTS.map(name => ({ name, total:vs.filter(v=>v.district===name).length, active:vs.filter(v=>v.district===name&&v.status==='Active').length }))
+    const by_status = STATUSES.map(name => ({ name, value:cs.filter(c=>c.status===name).length }))
+    const status_by_district = Object.fromEntries(DISTRICTS.map(d=>[d,STATUSES.map(name=>({name,value:cs.filter(c=>c.district===d&&c.status===name).length}))]))
+    const category_district = Object.fromEntries(CATEGORIES.map(cat=>[cat,DISTRICTS.map(d=>{const x=cs.filter(c=>c.category===cat&&c.district===d);return {name:d,total:x.length,pending:x.filter(c=>pending(c.status)).length,completed:x.filter(c=>c.status==='Completed').length}})]))
+    return json({ complaints:{total:cs.length,open:cs.filter(c=>c.status==='Open').length,in_progress:cs.filter(c=>c.status==='In Progress').length,on_hold:cs.filter(c=>c.status==='On Hold').length,completed:cs.filter(c=>c.status==='Completed').length,rejected:cs.filter(c=>c.status==='Rejected').length,urgent_pending:cs.filter(c=>c.priority==='Urgent'&&pending(c.status)).length,today:0}, volunteers:{total:vs.length,active:vs.filter(v=>v.status==='Active').length}, by_category, category_district, by_district, status_by_district, volunteers_by_district, by_status, trend:[], recent:cs.slice(0,6) })
   }
-  if (path[0] === 'reports') return json({ summary:{total:0,resolved:0,pending:0,avg_resolution_days:0,resolution_rate:0},by_district:[],by_category:[],by_priority:[],volunteer_performance:[] })
-  if (path[0] === 'constituencies') return json({ total_constituencies:0,total_districts:0,unmapped_complaints:0,districts:[] })
+  if (path[0] === 'reports' && path[1] === 'export') {
+    const rows=(await db(context).prepare('SELECT c.ticket_no,c.citizen_name,c.phone,c.category,c.subject,c.district,c.priority,c.status,v.name volunteer,c.created_at,c.resolved_at FROM complaints c LEFT JOIN volunteers v ON v.id=c.volunteer_id ORDER BY c.id').all()).results
+    const csv=[['Ticket','Citizen','Phone','Category','Subject','District','Priority','Status','Volunteer','Created','Resolved'],...rows.map(r=>[r.ticket_no,r.citizen_name,r.phone,r.category,r.subject,r.district,r.priority,r.status,r.volunteer||'',r.created_at,r.resolved_at||''])].map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n')+'\n'
+    return new Response(csv,{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="complaints_report.csv"','access-control-allow-origin':'*'}})
+  }
+  if (path[0] === 'reports') {
+    const [cr,vr]=await Promise.all([db(context).prepare('SELECT * FROM complaints ORDER BY id DESC').all(),db(context).prepare('SELECT * FROM volunteers ORDER BY name').all()]); const cs=cr.results,vs=vr.results
+    return json({ summary:{total:cs.length,resolved:cs.filter(c=>c.status==='Completed').length,pending:cs.filter(c=>pending(c.status)).length,avg_resolution_days:0,resolution_rate:cs.length?Math.round(100*cs.filter(c=>c.status==='Completed').length/cs.length*10)/10:0}, by_district:DISTRICTS.map(name=>{const x=cs.filter(c=>c.district===name);return {name,total:x.length,resolved:x.filter(c=>c.status==='Completed').length,pending:x.filter(c=>pending(c.status)).length}}), by_category:CATEGORIES.map(name=>{const x=cs.filter(c=>c.category===name);return {name,total:x.length,resolved:x.filter(c=>c.status==='Completed').length}}), by_priority:['Low','Medium','High','Urgent'].map(name=>({name,value:cs.filter(c=>c.priority===name).length})), volunteer_performance:vs.map(v=>{const x=cs.filter(c=>c.volunteer_id===v.id);return {id:v.id,name:v.name,district:v.district,assigned:x.length,resolved:x.filter(c=>c.status==='Completed').length}}) })
+  }
+  if (path[0] === 'constituencies') {
+    const rows=(await db(context).prepare('SELECT district,constituency,status FROM complaints WHERE constituency IS NOT NULL AND constituency != ?').bind('').all()).results
+    const districts=Object.entries(CONSTITUENCIES).map(([name,names])=>{const constituencies=names.map(n=>{const x=rows.filter(r=>r.district===name&&r.constituency===n);return {name:n,total:x.length,pending:x.filter(r=>pending(r.status)).length,completed:x.filter(r=>r.status==='Completed').length,rejected:x.filter(r=>r.status==='Rejected').length}});return {name,constituencies,count:constituencies.length,total:constituencies.reduce((a,x)=>a+x.total,0),pending:constituencies.reduce((a,x)=>a+x.pending,0),completed:constituencies.reduce((a,x)=>a+x.completed,0)}})
+    return json({total_constituencies:districts.reduce((a,d)=>a+d.count,0),total_districts:districts.length,unmapped_complaints:(await db(context).prepare("SELECT COUNT(*) n FROM complaints WHERE constituency IS NULL OR constituency='' ").first()).n,districts})
+  }
   return json({ detail: 'Not found' }, 404)
 }
